@@ -16,13 +16,13 @@ int main() {
 	int n;
 	int fin,fout;
 	fin=dup(STD_IN);
-	fout=dup(STD_OUT);
+	fout=dup(STD_OUT);//记录标准输入输出，便于恢复
     while (1) {
 		int i,j;
 		dup2(fin,STD_IN);
 		dup2(fout,STD_OUT);
 		cmd[0]='\0';
-		for (i=0;i<128;i++) args[i]=NULL;
+		for (i=0;i<128;i++) args[i]=NULL;//恢复原状
         /* 提示符 */
         printf("# ");
         fflush(stdin);
@@ -47,27 +47,26 @@ int main() {
                	}
         args[i] = NULL;
 		n=i;	
-		//for (i = 0; args[i]; i++) puts(args[i]);
-		/* 管道特性 */
+		/* 管道特性：
+			根据管道符号|将指令分离，前面的指令通过fork出的子进程执行，执行完毕后马上返回；父进程继续分离指令。
+			对于最后一个指令，由父进程执行，完毕后continue进入下一次循环，读取下一行指令。
+		*/
 		i=0;
 		while (args[i] != NULL) {
-			//printf("%d\n",i);
 			if (strcmp(args[i],"|")==0){
 				pipe(pipe_fd);//管道创建
 				pid=fork();//分叉
-				//printf("My pid is %d.\n",pid);
 				if (pid==0){
-					//puts("This is son thread.");
 					close(pipe_fd[0]);
 		 			dup2(pipe_fd[1],STD_OUT);
-					close(pipe_fd[1]);
-					for (j=i;j<=n;j++) args[j]=NULL;
+					close(pipe_fd[1]);//重定向
+					for (j=i;j<=n;j++) args[j]=NULL;//修改参数
 					goto cmd;
 				}
 				else {				
 					close(pipe_fd[1]);
 					dup2(pipe_fd[0],STD_IN);
-					close(pipe_fd[0]);
+					close(pipe_fd[0]);//重定向
 					wait(NULL);//等待子进程结束
 					for(j=i+1;j<=n;j++)	args[j-i-1]=args[j];
 					n=n-i-1;
@@ -76,8 +75,6 @@ int main() {
 			}
 			i++;
 		} 	
-		//if (pid==0) puts("This is son thread.");
-		//if (pid!=0) printf("%s\n",args[0]);
         /* 没有输入命令 */
 cmd:    if (!args[0]){
             if (pid==0) return 0;
@@ -106,10 +103,7 @@ cmd:    if (!args[0]){
 				puts(*e);
 				*e++;
 			}
-			if (pid==0) {
-				puts("son thread is over."); 
-				return 0;
-			}
+			if (pid==0) return 0;
 			else continue;
 		}//env命令
 		if (strcmp(args[0], "export") ==0) {
@@ -118,12 +112,12 @@ cmd:    if (!args[0]){
 				int l=strlen(args[1]);
 				while (args[1][i]!='=' && i<l) i++;
 				if (i==l) {
-					puts("illegal expression.You should input : export NAME=VALUE");
+					puts("Illegal expression.You should input : export NAME=VALUE");
 					if (pid==0) return 0;
 					else continue;
 				}
 				args[2] = args[1]+i+1;
-				args[1][i] = '\0';
+				args[1][i] = '\0';//将表达式的两端分离为两个参数
 				setenv(args[1],args[2],1);
 			}
 			if (pid==0) return 0;
@@ -144,11 +138,7 @@ cmd:    if (!args[0]){
         }
         /* 父进程 */
         wait(NULL);
-		if (pid==0) {
-			//printf("son thread is over\n");
-			return 0;					
-		}	
-		else continue;
-		
+		if (pid==0) return 0;					
+		else continue;		
     }
 }
